@@ -20,7 +20,7 @@ WEATHER_API_URL = 'http://api.openweathermap.org/data/2.5/weather?q={}&appid={}&
 controller_connected = False
 
 try:
-    port = serial.Serial("COM4", 9600)
+    port = serial.Serial("COM4", 9600) # Change the port address if it need in my case its COM4
     print("Board is connected")
     controller_connected = True
 except:
@@ -32,6 +32,7 @@ engine = pyttsx3.init()
 voices = engine.getProperty('voices')
 engine.setProperty('voice', voices[1].id)
 
+# Sending the command to the microcontroller
 def send_command(command):
     if controller_connected:
         port.write(command.encode())
@@ -63,7 +64,7 @@ def record_audio(ask=False):
 def speak(audio_string):
     engine.say(audio_string)
     engine.runAndWait()
-    display_text(f"Benda: {audio_string}")
+    display_text(f"Benda: {audio_string}") # You can change the assistance name if you want. Just replace the given name
 
 def get_weather(city):
     try:
@@ -123,7 +124,8 @@ def update_todo_list_display():
     todo_text.delete(1.0, tk.END)
     for item in todo_list:
         todo_text.insert(tk.END, f"- {item}\n")
-
+        
+# for calculations
 def perform_calculation(expression):
     try:
         result = eval(expression)
@@ -131,7 +133,7 @@ def perform_calculation(expression):
     except Exception as e:
         return "Sorry, I couldn't calculate that."
 
- 
+# Eshtablished basic commands 
 def respond(voice_data):
     display_text(f"You: {voice_data}")
     if there_exists(['hey', 'hi', 'hello'], voice_data):
