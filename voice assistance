@@ -1,0 +1,279 @@
+# Install all This Libraries. tkinter, Speech_recongnition, pyttsx3, pyaudio, serial, wikipedia.
+# Connect microcontroller(Arduino,esp,rasbarry pi) For control lights.
+import tkinter as tk
+from tkinter import scrolledtext
+import speech_recognition as sr
+import pyttsx3
+import webbrowser
+import time
+import serial
+import wikipedia as wiki
+from datetime import datetime
+import requests
+import random
+import threading
+
+# Weather API setup (replace 'YOUR_API_KEY' with an actual API key from OpenWeather)
+WEATHER_API_KEY = 'YOUR_API_KEY'
+WEATHER_API_URL = 'http://api.openweathermap.org/data/2.5/weather?q={}&appid={}&units=metric'
+
+controller_connected = False
+
+try:
+    port = serial.Serial("COM4", 9600)
+    print("Board is connected")
+    controller_connected = True
+except:
+    print("Unable to connect with controller")
+
+listener = sr.Recognizer()
+mic = sr.Microphone(device_index=1)
+engine = pyttsx3.init()
+voices = engine.getProperty('voices')
+engine.setProperty('voice', voices[1].id)
+
+def send_command(command):
+    if controller_connected:
+        port.write(command.encode())
+
+def there_exists(terms, voice_data):
+    for term in terms:
+        if term in voice_data:
+            return True
+    return False
+
+
+def record_audio(ask=False):
+    with mic as source:
+        listener.adjust_for_ambient_noise(source)
+        if ask:
+            speak(ask)
+
+        audio = listener.listen(source)
+        voice_data = ''
+        try:
+            voice_data = listener.recognize_google(audio)
+        except sr.UnknownValueError:
+            speak('Sorry, I did not get that')
+        except sr.RequestError:
+            speak('Sorry, the service is down')
+        print(f">> {voice_data.lower()}")
+        return voice_data.lower()
+
+def speak(audio_string):
+    engine.say(audio_string)
+    engine.runAndWait()
+    display_text(f"Benda: {audio_string}")
+
+def get_weather(city):
+    try:
+        response = requests.get(WEATHER_API_URL.format(city, WEATHER_API_KEY))
+        data = response.json()
+        if data["cod"] != "404":
+            main = data["main"]
+            weather_desc = data["weather"][0]["description"]
+            temp = main["temp"]
+            return f"The temperature in {city} is {temp} degrees Celsius with {weather_desc}."
+        else:
+            return "City not found."
+    except Exception as e:
+        return "Unable to get weather information at the moment."
+
+def set_reminder(reminder_time, reminder_msg):
+    reminder_time_obj = datetime.strptime(reminder_time, '%H:%M')
+    while True:
+        if datetime.now() >= reminder_time_obj:
+            speak(f"Reminder: {reminder_msg}")
+            break
+        time.sleep(30)
+
+def tell_joke():
+    jokes = [
+        "Why don't scientists trust atoms? Because they make up everything!",
+        "Why did the scarecrow win an award? Because he was outstanding in his field!",
+        "Why don't some couples go to the gym? Because some relationships don't work out."
+    ]
+    return random.choice(jokes)
+
+# To-do list functionality
+todo_list = []
+
+def add_todo_item(item):
+    todo_list.append(item)
+    speak(f"Added {item} to your to-do list.")
+    update_todo_list_display()
+
+def remove_todo_item(item):
+    if item in todo_list:
+        todo_list.remove(item)
+        speak(f"Removed {item} from your to-do list.")
+    else:
+        speak(f"{item} is not in your to-do list.")
+    update_todo_list_display()
+
+def list_todo_items():
+    if todo_list:
+        speak("Here are your to-do items:")
+        for item in todo_list:
+            speak(item)
+    else:
+        speak("Your to-do list is empty.")
+
+def update_todo_list_display():
+    todo_text.delete(1.0, tk.END)
+    for item in todo_list:
+        todo_text.insert(tk.END, f"- {item}\n")
+
+def perform_calculation(expression):
+    try:
+        result = eval(expression)
+        return f"The result of {expression} is {result}"
+    except Exception as e:
+        return "Sorry, I couldn't calculate that."
+
+ 
+def respond(voice_data):
+    display_text(f"You: {voice_data}")
+    if there_exists(['hey', 'hi', 'hello'], voice_data):
+        speak("Hey, how can I help you, sir?")
+
+    #if there_exists(['hey benda'], voice_data):
+        #speak("Hello sir")
+
+    if there_exists(['how are you', 'how are you doing'], voice_data):
+        speak("I am very well, thanks for asking, sir")
+
+    if there_exists(['what is your name', 'what\'s your name'], voice_data):
+        speak("My name is Benda")
+
+    if there_exists(['what is your purpose', 'what is your duty'], voice_data):
+        speak("I am your personal assistant, sir")
+
+    if there_exists(['turn on the light','benda turn on the light'], voice_data):
+        speak("Ok sir, turning on the light")
+        send_command('off\n')
+        speak("Task done successfully, sir")
+
+    if there_exists(['turn off the light','benda turn off the light'], voice_data):
+        speak("Ok sir, turning off the light")
+        send_command('on\n')
+        speak("Task done successfully, sir")
+
+    if there_exists(['what is your special functionality'], voice_data):
+        speak("I have access to your room's electricity")
+
+    # Check the current time
+    if there_exists(['what is the time', 'tell me the time', 'current time'], voice_data):
+        current_time = datetime.now().strftime("%H:%M")
+        speak(f"The current time is {current_time}")
+
+    # Weather information
+    if there_exists(['weather in'], voice_data):
+        city = voice_data.split("in")[-1].strip()
+        weather_info = get_weather(city)
+        speak(weather_info)
+
+    # Set a reminder
+    if there_exists(['remind me at'], voice_data):
+        reminder_details = voice_data.split("at")[-1].strip()
+        reminder_time = reminder_details.split("to")[0].strip()
+        reminder_msg = reminder_details.split("to")[-1].strip()
+        speak(f"Setting a reminder at {reminder_time} to {reminder_msg}")
+        set_reminder(reminder_time, reminder_msg)
+
+    # Tell a joke
+    if there_exists(['tell me a joke', 'make me laugh','once more'], voice_data):
+        joke = tell_joke()
+        speak(joke)
+
+    # Google search
+    if there_exists(["search for"], voice_data) and 'youtube' not in voice_data:
+        search_term = voice_data.split("for")[-1].strip()
+        url = f"https://google.com/search?q={search_term}"
+        webbrowser.get().open(url)
+        speak(f"Here is what I found for {search_term} on Google")
+
+    # YouTube search
+    if there_exists(["play "], voice_data):
+        search_term = voice_data.split("play")[-1].strip()
+        url = f"https://www.youtube.com/results?search_query={search_term}"
+        webbrowser.get().open(url)
+        speak(f"Here is what I found for {search_term} on YouTube")
+
+    # Wikipedia search
+    if there_exists(['summarise', 'summarize'], voice_data):
+        search_term = voice_data.split("summarise")[-1].strip()
+        try:
+            summary = wiki.summary(search_term, sentences=5)
+            speak(summary)
+        except wiki.exceptions.DisambiguationError as e:
+            speak("There are multiple results. Please be more specific.")
+
+    # Perform calculation
+    if there_exists(['calculate'], voice_data):
+        expression = voice_data.split("calculate")[-1].strip()
+        result = perform_calculation(expression)
+        speak(result)
+        
+    # To-do list operations
+    if there_exists(['add to my to do list','add task'], voice_data):
+        item = voice_data.split("list")[-1].strip()
+        add_todo_item(item)
+    
+    if there_exists(['remove from my to do list'], voice_data):
+        item = voice_data.split("list")[-1].strip()
+        remove_todo_item(item)
+    
+    if there_exists(['show my to do list', 'what is on my to-do list'], voice_data):
+        list_todo_items()
+
+    if there_exists(["exit", "quit", "bye"], voice_data):
+        speak("Going offline")
+        if controller_connected:
+            port.write(bytes([117]))
+        root.quit()
+        exit()
+
+def listen_continuously():
+    while True:
+        voice_data = record_audio()
+    
+    
+        if "banda" in voice_data:
+            respond(voice_data)
+
+# GUI Setup
+root = tk.Tk()
+root.title("Benda - Voice Assistant")
+root.geometry("600x700")
+root.configure(bg="#2C3E50")
+
+frame = tk.Frame(root, bg="#2C3E50")
+frame.pack(pady=20)
+
+label = tk.Label(frame, text="Benda - Voice Assistant", font=("Helvetica", 20, "bold"), fg="white", bg="#2C3E50")
+label.pack(pady=10)
+
+chat_label = tk.Label(frame, text="Chat", font=("Helvetica", 14), bg="#2C3E50", fg="#ECF0F1")
+chat_label.pack(pady=10)
+
+chat_log = scrolledtext.ScrolledText(frame, width=60, height=15, bg="#34495E", fg="#ECF0F1", font=("Helvetica", 12), wrap=tk.WORD, bd=0, highlightthickness=0)
+chat_log.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
+
+todo_label = tk.Label(frame, text="To-Do List", font=("Helvetica", 14), bg="#2C3E50", fg="#ECF0F1")
+todo_label.pack(pady=10)
+
+todo_text = scrolledtext.ScrolledText(frame, width=40, height=10, bg="#34495E", fg="#ECF0F1", font=("Helvetica", 12), wrap=tk.WORD, bd=0, highlightthickness=0)
+todo_text.pack(pady=10)
+
+def display_text(text):
+    chat_log.insert(tk.END, f"{text}\n")
+    chat_log.yview(tk.END)
+
+update_todo_list_display()
+
+# Start the continuous listening in a separate thread
+thread = threading.Thread(target=listen_continuously, daemon=True)
+thread.start()
+
+root.mainloop()
